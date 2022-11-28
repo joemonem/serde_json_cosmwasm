@@ -9,9 +9,9 @@ use alloc::string::{String, ToString};
 use core::fmt::{self, Debug, Display};
 #[cfg(not(feature = "arbitrary_precision"))]
 use core::hash::{Hash, Hasher};
-use serde::de::{Unexpected, Visitor};
 #[cfg(feature = "arbitrary_precision")]
 use serde::de::{IntoDeserializer, MapAccess};
+use serde::de::{Unexpected, Visitor};
 use serde::{forward_to_deserialize_any, Deserialize, Deserializer, Serialize, Serializer};
 
 #[cfg(feature = "arbitrary_precision")]
@@ -397,14 +397,7 @@ macro_rules! deserialize_any {
         {
             if let Some(u) = self.as_u64() {
                 return visitor.visit_u64(u);
-            } else if let Some(i) = self.as_i64() {
-                return visitor.visit_i64(i);
-            } else if let Some(f) = self.as_f64() {
-                if ryu::Buffer::new().format_finite(f) == self.n || f.to_string() == self.n {
-                    return visitor.visit_f64(f);
-                }
             }
-
             visitor.visit_map(NumberDeserializer {
                 number: Some(self.$($num_string)*),
             })
