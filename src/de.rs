@@ -100,9 +100,8 @@ macro_rules! overflow {
 }
 
 pub(crate) enum ParserNumber {
-    F64(f64),
     U64(u64),
-    I64(i64),
+
     #[cfg(feature = "arbitrary_precision")]
     String(String),
 }
@@ -113,9 +112,8 @@ impl ParserNumber {
         V: de::Visitor<'de>,
     {
         match self {
-            ParserNumber::F64(x) => visitor.visit_f64(x),
             ParserNumber::U64(x) => visitor.visit_u64(x),
-            ParserNumber::I64(x) => visitor.visit_i64(x),
+
             #[cfg(feature = "arbitrary_precision")]
             ParserNumber::String(x) => visitor.visit_map(NumberDeserializer { number: x.into() }),
         }
@@ -123,9 +121,8 @@ impl ParserNumber {
 
     fn invalid_type(self, exp: &dyn Expected) -> Error {
         match self {
-            ParserNumber::F64(x) => de::Error::invalid_type(Unexpected::Float(x), exp),
             ParserNumber::U64(x) => de::Error::invalid_type(Unexpected::Unsigned(x), exp),
-            ParserNumber::I64(x) => de::Error::invalid_type(Unexpected::Signed(x), exp),
+
             #[cfg(feature = "arbitrary_precision")]
             ParserNumber::String(_) => de::Error::invalid_type(Unexpected::Other("number"), exp),
         }
@@ -407,11 +404,6 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                             // try to keep the number as a `u64` until we grow
                             // too large. At that point, switch to parsing the
                             // value as a `f64`.
-                            if overflow!(significand * 10 + digit, u64::max_value()) {
-                                return Ok(ParserNumber::F64(tri!(
-                                    self.parse_long_integer(positive, significand),
-                                )));
-                            }
 
                             self.eat_char();
                             significand = significand * 10 + digit;
@@ -426,25 +418,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
-    fn parse_number(&mut self, positive: bool, significand: u64) -> Result<ParserNumber> {
-        Ok(match tri!(self.peek_or_null()) {
-            b'.' => ParserNumber::F64(tri!(self.parse_decimal(positive, significand, 0))),
-            b'e' | b'E' => ParserNumber::F64(tri!(self.parse_exponent(positive, significand, 0))),
-            _ => {
-                if positive {
-                    ParserNumber::U64(significand)
-                } else {
-                    let neg = (significand as i64).wrapping_neg();
-
-                    // Convert into a float if we underflow, or on `-0`.
-                    if neg >= 0 {
-                        ParserNumber::F64(-(significand as f64))
-                    } else {
-                        ParserNumber::I64(neg)
-                    }
-                }
-            }
-        })
+    fn parse_number(&mut self, _positive: bool, significand: u64) -> Result<ParserNumber> {
+        Ok(ParserNumber::U64(significand))
     }
 
     fn parse_decimal(

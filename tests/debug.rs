@@ -3,12 +3,7 @@ use serde_json::{json, Number, Value};
 
 #[test]
 fn number() {
-    assert_eq!(format!("{:?}", Number::from(1)), "Number(1)");
-    assert_eq!(format!("{:?}", Number::from(-1)), "Number(-1)");
-    assert_eq!(
-        format!("{:?}", Number::from_f64(1.0).unwrap()),
-        "Number(1.0)"
-    );
+    assert_eq!(format!("{:?}", Number::from(1_u32)), "Number(1)");
 }
 
 #[test]
@@ -27,8 +22,6 @@ fn value_number() {
     assert_eq!(format!("{:?}", json!(1)), "Number(1)");
     assert_eq!(format!("{:?}", json!(-1)), "Number(-1)");
     assert_eq!(format!("{:?}", json!(1.0)), "Number(1.0)");
-    assert_eq!(Number::from_f64(1.0).unwrap().to_string(), "1.0"); // not just "1"
-    assert_eq!(Number::from_f64(12e40).unwrap().to_string(), "1.2e41");
 }
 
 #[test]

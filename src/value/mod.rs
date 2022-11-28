@@ -585,12 +585,6 @@ impl Value {
     /// assert!(!v["b"].is_f64());
     /// assert!(!v["c"].is_f64());
     /// ```
-    pub fn is_f64(&self) -> bool {
-        match self {
-            Value::Number(n) => n.is_f64(),
-            _ => false,
-        }
-    }
 
     /// If the `Value` is an integer, represent it as i64 if possible. Returns
     /// None otherwise.
@@ -643,12 +637,6 @@ impl Value {
     /// assert_eq!(v["b"].as_f64(), Some(64.0));
     /// assert_eq!(v["c"].as_f64(), Some(-64.0));
     /// ```
-    pub fn as_f64(&self) -> Option<f64> {
-        match self {
-            Value::Number(n) => n.as_f64(),
-            _ => None,
-        }
-    }
 
     /// Returns true if the `Value` is a Boolean. Returns false otherwise.
     ///

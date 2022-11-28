@@ -19,45 +19,12 @@ macro_rules! from_integer {
 }
 
 from_integer! {
-    i8 i16 i32 i64 isize
     u8 u16 u32 u64 usize
 }
 
 #[cfg(feature = "arbitrary_precision")]
 from_integer! {
     i128 u128
-}
-
-impl From<f32> for Value {
-    /// Convert 32-bit floating point number to `Value`
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use serde_json::Value;
-    ///
-    /// let f: f32 = 13.37;
-    /// let x: Value = f.into();
-    /// ```
-    fn from(f: f32) -> Self {
-        From::from(f as f64)
-    }
-}
-
-impl From<f64> for Value {
-    /// Convert 64-bit floating point number to `Value`
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use serde_json::Value;
-    ///
-    /// let f: f64 = 13.37;
-    /// let x: Value = f.into();
-    /// ```
-    fn from(f: f64) -> Self {
-        Number::from_f64(f).map_or(Value::Null, Value::Number)
-    }
 }
 
 impl From<bool> for Value {

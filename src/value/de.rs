@@ -1,6 +1,6 @@
 use crate::error::Error;
 use crate::map::Map;
-use crate::number::Number;
+
 use crate::value::Value;
 use alloc::borrow::{Cow, ToOwned};
 use alloc::string::String;
@@ -40,18 +40,8 @@ impl<'de> Deserialize<'de> for Value {
             }
 
             #[inline]
-            fn visit_i64<E>(self, value: i64) -> Result<Value, E> {
-                Ok(Value::Number(value.into()))
-            }
-
-            #[inline]
             fn visit_u64<E>(self, value: u64) -> Result<Value, E> {
                 Ok(Value::Number(value.into()))
-            }
-
-            #[inline]
-            fn visit_f64<E>(self, value: f64) -> Result<Value, E> {
-                Ok(Number::from_f64(value).map_or(Value::Null, Value::Number))
             }
 
             #[cfg(any(feature = "std", feature = "alloc"))]

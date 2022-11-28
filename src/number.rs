@@ -9,7 +9,7 @@ use alloc::string::{String, ToString};
 use core::fmt::{self, Debug, Display};
 #[cfg(not(feature = "arbitrary_precision"))]
 use core::hash::{Hash, Hasher};
-use serde::de::{self, Unexpected, Visitor};
+use serde::de::{Unexpected, Visitor};
 #[cfg(feature = "arbitrary_precision")]
 use serde::de::{IntoDeserializer, MapAccess};
 use serde::{forward_to_deserialize_any, Deserialize, Deserializer, Serialize, Serializer};
@@ -27,10 +27,6 @@ pub struct Number {
 #[derive(Copy, Clone)]
 enum N {
     PosInt(u64),
-    /// Always less than zero.
-    NegInt(i64),
-    /// Always finite.
-    Float(f64),
 }
 
 #[cfg(not(feature = "arbitrary_precision"))]
@@ -38,8 +34,6 @@ impl PartialEq for N {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (N::PosInt(a), N::PosInt(b)) => a == b,
-            (N::NegInt(a), N::NegInt(b)) => a == b,
-            (N::Float(a), N::Float(b)) => a == b,
             _ => false,
         }
     }
@@ -54,17 +48,6 @@ impl Hash for N {
     fn hash<H: Hasher>(&self, h: &mut H) {
         match *self {
             N::PosInt(i) => i.hash(h),
-            N::NegInt(i) => i.hash(h),
-            N::Float(f) => {
-                if f == 0.0f64 {
-                    // There are 2 zero representations, +0 and -0, which
-                    // compare equal but have different bits. We use the +0 hash
-                    // for both so that hash(+0) == hash(-0).
-                    0.0f64.to_bits().hash(h);
-                } else {
-                    f.to_bits().hash(h);
-                }
-            }
         }
     }
 }
@@ -98,8 +81,6 @@ impl Number {
         #[cfg(not(feature = "arbitrary_precision"))]
         match self.n {
             N::PosInt(v) => v <= i64::max_value() as u64,
-            N::NegInt(_) => true,
-            N::Float(_) => false,
         }
         #[cfg(feature = "arbitrary_precision")]
         self.as_i64().is_some()
@@ -128,7 +109,6 @@ impl Number {
         #[cfg(not(feature = "arbitrary_precision"))]
         match self.n {
             N::PosInt(_) => true,
-            N::NegInt(_) | N::Float(_) => false,
         }
         #[cfg(feature = "arbitrary_precision")]
         self.as_u64().is_some()
@@ -153,23 +133,6 @@ impl Number {
     /// assert!(!v["b"].is_f64());
     /// assert!(!v["c"].is_f64());
     /// ```
-    #[inline]
-    pub fn is_f64(&self) -> bool {
-        #[cfg(not(feature = "arbitrary_precision"))]
-        match self.n {
-            N::Float(_) => true,
-            N::PosInt(_) | N::NegInt(_) => false,
-        }
-        #[cfg(feature = "arbitrary_precision")]
-        {
-            for c in self.n.chars() {
-                if c == '.' || c == 'e' || c == 'E' {
-                    return self.n.parse::<f64>().ok().map_or(false, f64::is_finite);
-                }
-            }
-            false
-        }
-    }
 
     /// If the `Number` is an integer, represent it as i64 if possible. Returns
     /// None otherwise.
@@ -195,8 +158,6 @@ impl Number {
                     None
                 }
             }
-            N::NegInt(n) => Some(n),
-            N::Float(_) => None,
         }
         #[cfg(feature = "arbitrary_precision")]
         self.n.parse().ok()
@@ -219,7 +180,6 @@ impl Number {
         #[cfg(not(feature = "arbitrary_precision"))]
         match self.n {
             N::PosInt(n) => Some(n),
-            N::NegInt(_) | N::Float(_) => None,
         }
         #[cfg(feature = "arbitrary_precision")]
         self.n.parse().ok()
@@ -236,17 +196,6 @@ impl Number {
     /// assert_eq!(v["b"].as_f64(), Some(64.0));
     /// assert_eq!(v["c"].as_f64(), Some(-64.0));
     /// ```
-    #[inline]
-    pub fn as_f64(&self) -> Option<f64> {
-        #[cfg(not(feature = "arbitrary_precision"))]
-        match self.n {
-            N::PosInt(n) => Some(n as f64),
-            N::NegInt(n) => Some(n as f64),
-            N::Float(n) => Some(n),
-        }
-        #[cfg(feature = "arbitrary_precision")]
-        self.n.parse::<f64>().ok().filter(|float| float.is_finite())
-    }
 
     /// Converts a finite `f64` to a `Number`. Infinite or NaN values are not JSON
     /// numbers.
@@ -260,24 +209,6 @@ impl Number {
     ///
     /// assert!(Number::from_f64(f64::NAN).is_none());
     /// ```
-    #[inline]
-    pub fn from_f64(f: f64) -> Option<Number> {
-        if f.is_finite() {
-            let n = {
-                #[cfg(not(feature = "arbitrary_precision"))]
-                {
-                    N::Float(f)
-                }
-                #[cfg(feature = "arbitrary_precision")]
-                {
-                    ryu::Buffer::new().format_finite(f).to_owned()
-                }
-            };
-            Some(Number { n })
-        } else {
-            None
-        }
-    }
 
     #[cfg(feature = "arbitrary_precision")]
     /// Not public API. Only tests use this.
@@ -293,8 +224,6 @@ impl Display for Number {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         match self.n {
             N::PosInt(u) => formatter.write_str(itoa::Buffer::new().format(u)),
-            N::NegInt(i) => formatter.write_str(itoa::Buffer::new().format(i)),
-            N::Float(f) => formatter.write_str(ryu::Buffer::new().format_finite(f)),
         }
     }
 
@@ -319,8 +248,6 @@ impl Serialize for Number {
     {
         match self.n {
             N::PosInt(u) => serializer.serialize_u64(u),
-            N::NegInt(i) => serializer.serialize_i64(i),
-            N::Float(f) => serializer.serialize_f64(f),
         }
     }
 
@@ -354,21 +281,8 @@ impl<'de> Deserialize<'de> for Number {
             }
 
             #[inline]
-            fn visit_i64<E>(self, value: i64) -> Result<Number, E> {
-                Ok(value.into())
-            }
-
-            #[inline]
             fn visit_u64<E>(self, value: u64) -> Result<Number, E> {
                 Ok(value.into())
-            }
-
-            #[inline]
-            fn visit_f64<E>(self, value: f64) -> Result<Number, E>
-            where
-                E: de::Error,
-            {
-                Number::from_f64(value).ok_or_else(|| de::Error::custom("not a JSON number"))
             }
 
             #[cfg(feature = "arbitrary_precision")]
@@ -473,8 +387,6 @@ macro_rules! deserialize_any {
         {
             match self.n {
                 N::PosInt(u) => visitor.visit_u64(u),
-                N::NegInt(i) => visitor.visit_i64(i),
-                N::Float(f) => visitor.visit_f64(f),
             }
         }
 
@@ -629,16 +541,6 @@ impl<'de> Deserializer<'de> for NumberFieldDeserializer {
 impl From<ParserNumber> for Number {
     fn from(value: ParserNumber) -> Self {
         let n = match value {
-            ParserNumber::F64(f) => {
-                #[cfg(not(feature = "arbitrary_precision"))]
-                {
-                    N::Float(f)
-                }
-                #[cfg(feature = "arbitrary_precision")]
-                {
-                    f.to_string()
-                }
-            }
             ParserNumber::U64(u) => {
                 #[cfg(not(feature = "arbitrary_precision"))]
                 {
@@ -647,16 +549,6 @@ impl From<ParserNumber> for Number {
                 #[cfg(feature = "arbitrary_precision")]
                 {
                     u.to_string()
-                }
-            }
-            ParserNumber::I64(i) => {
-                #[cfg(not(feature = "arbitrary_precision"))]
-                {
-                    N::NegInt(i)
-                }
-                #[cfg(feature = "arbitrary_precision")]
-                {
-                    i.to_string()
                 }
             }
             #[cfg(feature = "arbitrary_precision")]
@@ -700,11 +592,9 @@ macro_rules! impl_from_signed {
                     let n = {
                         #[cfg(not(feature = "arbitrary_precision"))]
                         {
-                            if i < 0 {
-                                N::NegInt(i as i64)
-                            } else {
+
                                 N::PosInt(i as u64)
-                            }
+
                         }
                         #[cfg(feature = "arbitrary_precision")]
                         {
@@ -719,7 +609,6 @@ macro_rules! impl_from_signed {
 }
 
 impl_from_unsigned!(u8, u16, u32, u64, usize);
-impl_from_signed!(i8, i16, i32, i64, isize);
 
 #[cfg(feature = "arbitrary_precision")]
 impl_from_unsigned!(u128);
@@ -732,8 +621,6 @@ impl Number {
     pub(crate) fn unexpected(&self) -> Unexpected {
         match self.n {
             N::PosInt(u) => Unexpected::Unsigned(u),
-            N::NegInt(i) => Unexpected::Signed(i),
-            N::Float(f) => Unexpected::Float(f),
         }
     }
 
