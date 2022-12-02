@@ -1,13 +1,10 @@
 //! Deserialize JSON data to a Rust data structure.
 
 use crate::error::{Error, ErrorCode, Result};
-#[cfg(feature = "float_roundtrip")]
-use crate::lexical;
 use crate::number::Number;
 use crate::read::{self, Fused, Reference};
 use alloc::string::String;
 use alloc::vec::Vec;
-#[cfg(feature = "float_roundtrip")]
 use core::iter;
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
@@ -31,10 +28,6 @@ pub struct Deserializer<R> {
     read: R,
     scratch: Vec<u8>,
     remaining_depth: u8,
-    #[cfg(feature = "float_roundtrip")]
-    single_precision: bool,
-    #[cfg(feature = "unbounded_depth")]
-    disable_recursion_limit: bool,
 }
 
 impl<'de, R> Deserializer<R>
@@ -54,10 +47,6 @@ where
             read,
             scratch: Vec::new(),
             remaining_depth: 128,
-            #[cfg(feature = "float_roundtrip")]
-            single_precision: false,
-            #[cfg(feature = "unbounded_depth")]
-            disable_recursion_limit: false,
         }
     }
 }
@@ -412,21 +401,6 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     fn parse_number(&mut self, _positive: bool, significand: u64) -> Result<ParserNumber> {
         Ok(ParserNumber::U64(significand))
-    }
-
-    #[cfg(feature = "float_roundtrip")]
-    fn f64_from_parts(&mut self, positive: bool, significand: u64, exponent: i32) -> Result<f64> {
-        let f = if self.single_precision {
-            lexical::parse_concise_float::<f32>(significand, exponent) as f64
-        } else {
-            lexical::parse_concise_float::<f64>(significand, exponent)
-        };
-
-        if f.is_infinite() {
-            Err(self.error(ErrorCode::NumberOutOfRange))
-        } else {
-            Ok(if positive { f } else { -f })
-        }
     }
 
     fn parse_any_signed_number(&mut self) -> Result<ParserNumber> {
@@ -1000,17 +974,6 @@ impl<'de, 'a, R: Read<'de>> de::Deserializer<'de> for &'a mut Deserializer<R> {
     #[cfg(not(feature = "float_roundtrip"))]
     deserialize_number!(deserialize_f32);
     deserialize_number!(deserialize_f64);
-
-    #[cfg(feature = "float_roundtrip")]
-    fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: de::Visitor<'de>,
-    {
-        self.single_precision = true;
-        let val = self.deserialize_number(visitor);
-        self.single_precision = false;
-        val
-    }
 
     fn deserialize_i128<V>(self, visitor: V) -> Result<V::Value>
     where
